@@ -319,8 +319,7 @@
         (case method
             [(empty?) (null? netlist)]
             [(add)    (method-add-mosfets-to-netlist transistors netlist)]
-            ;; [(delete) (method-remove-duplicates (method-add-mosfets-to-netlist transistors netlist))]
-            [(delete) (delete-duplicates (method-add-mosfets-to-netlist transistors netlist))] ; R7RS-large scheme.list
+            [(delete) (lset-difference equal? netlist transistors)]
             [else =>  (list? netlist)]))
 
     ;; Checks:
@@ -377,14 +376,14 @@ netlist;            '()
         Returns a netlist."
         (if (null? netlist)
             '()
-            (let* ([transistor (car netlist)]
+            (let* ([transistor (method-clone-mosfet (car netlist))]
                    [old-node   (car nodes)]
                    [new-node   (cadr nodes)])
                 (if (equal? (gate transistor)   old-node) (set-gate!   transistor new-node))
                 (if (equal? (source transistor) old-node) (set-source! transistor new-node))
                 (if (equal? (drain transistor)  old-node) (set-drain!  transistor new-node))
                 ;;(if (equal? (bulk transistor)   old-node) (set-bulk!   transistor new-node))
-                (method-add-mosfets-to-netlist (list transistor) (netlist-rename-node (cdr netlist) nodes)))))
+                (cons transistor (netlist-rename-node (cdr netlist) nodes)))))
 
 ;;;     ------------    remove-netlist-buffer   ---------------------------
 
@@ -497,7 +496,8 @@ netlist;            '()
                [new-netlist (case method [(nand) (expand-netlist-nand current-netlist)]
                                          [(nor)  (expand-netlist-nor  current-netlist)]
                                          [(pu)   (expand-netlist-pu   current-netlist)]
-                                         [(pd)   (expand-netlist-pd   current-netlist)])])
+                                         [(pd)   (expand-netlist-pd   current-netlist)])]
+               [final-netlist (sort-netlist-descending (expand-netlist-w-buffer new-netlist buffer-limit))])
             (begin
                 ;; set origin + name + description
                 (set-origin! new-cell (id cell))
@@ -505,12 +505,12 @@ netlist;            '()
                 (set-description! new-cell cell-descr)
 
                 ;; write back netlist into <cell> structure
-                (set-netlist! new-cell (sort-netlist-descending (expand-netlist-w-buffer new-netlist buffer-limit)))
+                (set-netlist! new-cell final-netlist)
 
                 ;; netlist dependencies
-                (set-inputs!  new-cell (remove-doubled-nodes (sort-nodes-descending (grep-input-nodes new-netlist))))
-                (set-outputs! new-cell (remove-doubled-nodes (sort-nodes-descending (grep-output-nodes new-netlist))))
-                (let ([clock-gates (remove-doubled-nodes (sort-nodes-descending (grep-clock-nodes new-netlist)))])
+                (set-inputs!  new-cell (remove-doubled-nodes (sort-nodes-descending (grep-input-nodes final-netlist))))
+                (set-outputs! new-cell (remove-doubled-nodes (sort-nodes-descending (grep-output-nodes final-netlist))))
+                (let ([clock-gates (remove-doubled-nodes (sort-nodes-descending (grep-clock-nodes final-netlist)))])
                     (set-clocks! new-cell (if (null? clock-gates) '() clock-gates)))
                 (set-ascii-art! new-cell (ascii-art cell))) ; !! fixme
             new-cell))
